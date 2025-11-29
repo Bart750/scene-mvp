@@ -48,6 +48,7 @@ function App() {
   const [isLoading, setIsLoading] = useState(true)
   const [user, setUser] = useState(null)
   const [interestedData, setInterestedData] = useState({}) // { eventId: { count: number, userInterested: boolean } }
+  const [checkinData, setCheckinData] = useState({}) // { eventId: { userCheckedIn: boolean } }
   
   // Initialize date range: From = today, To = 7 days from now
   const getTodayString = () => {
@@ -157,6 +158,46 @@ function App() {
     fetchInterestedData()
   }, [events, user])
 
+  // Fetch check-in data when events or user changes
+  useEffect(() => {
+    const fetchCheckinData = async () => {
+      if (events.length === 0 || !user) {
+        setCheckinData({})
+        return
+      }
+
+      try {
+        const eventIds = events.map(e => e.id)
+        
+        // Fetch all check-in records for these events for the current user
+        const { data: checkinRecords, error } = await supabase
+          .from('checkins')
+          .select('event_id')
+          .in('event_id', eventIds)
+          .eq('user_id', user.id)
+
+        if (error) {
+          console.error('Error fetching check-in data:', error)
+          return
+        }
+
+        // Create map of events user has checked into
+        const checkinMap = {}
+        eventIds.forEach(eventId => {
+          checkinMap[eventId] = {
+            userCheckedIn: checkinRecords?.some(r => r.event_id === eventId) || false
+          }
+        })
+
+        setCheckinData(checkinMap)
+      } catch (error) {
+        console.error('Error fetching check-in data:', error)
+      }
+    }
+
+    fetchCheckinData()
+  }, [events, user])
+
   const handleMapClick = (latlng) => {
     // Require login to add events
     if (!user) {
@@ -186,6 +227,49 @@ function App() {
       console.error('Error signing out:', error)
       alert('Failed to sign out. Please try again.')
     }
+  }
+
+  // Calculate distance between two GPS coordinates using Haversine formula
+  const calculateDistance = (lat1, lon1, lat2, lon2) => {
+    const R = 6371e3 // Earth's radius in meters
+    const φ1 = lat1 * Math.PI / 180
+    const φ2 = lat2 * Math.PI / 180
+    const Δφ = (lat2 - lat1) * Math.PI / 180
+    const Δλ = (lon2 - lon1) * Math.PI / 180
+
+    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+              Math.cos(φ1) * Math.cos(φ2) *
+              Math.sin(Δλ / 2) * Math.sin(Δλ / 2)
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+
+    return R * c // Distance in meters
+  }
+
+  // Get user's current GPS location
+  const getUserLocation = () => {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(new Error('Geolocation is not supported by your browser'))
+        return
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          resolve({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          })
+        },
+        (error) => {
+          reject(error)
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0
+        }
+      )
+    })
   }
 
   const handleToggleInterest = async (eventId) => {
@@ -241,6 +325,71 @@ function App() {
     } catch (error) {
       console.error('Error toggling interest:', error)
       alert('Failed to update interest. Please try again.')
+    }
+  }
+
+  const handleCheckIn = async (eventId, eventPosition) => {
+    if (!user) {
+      handleSignIn()
+      return
+    }
+
+    // Check if already checked in
+    const currentCheckin = checkinData[eventId]
+    if (currentCheckin?.userCheckedIn) {
+      return // Already checked in
+    }
+
+    try {
+      // Get user's current location
+      const userLocation = await getUserLocation()
+      
+      // Calculate distance between user and event
+      const distance = calculateDistance(
+        userLocation.lat,
+        userLocation.lng,
+        eventPosition[0],
+        eventPosition[1]
+      )
+
+      // Check if within 100 meters
+      if (distance > 100) {
+        alert("You're too far from this event to check in")
+        return
+      }
+
+      // Save check-in to database
+      const { error } = await supabase
+        .from('checkins')
+        .insert([
+          {
+            event_id: eventId,
+            user_id: user.id
+          }
+        ])
+
+      if (error) throw error
+
+      // Update local state
+      setCheckinData(prev => ({
+        ...prev,
+        [eventId]: {
+          userCheckedIn: true
+        }
+      }))
+    } catch (error) {
+      console.error('Error checking in:', error)
+      if (error.message === 'Geolocation is not supported by your browser') {
+        alert('Geolocation is not supported by your browser')
+      } else if (error.code === 1) {
+        alert('Location access denied. Please enable location permissions to check in.')
+      } else if (error.code === 2) {
+        alert('Location unavailable. Please try again.')
+      } else if (error.code === 3) {
+        alert('Location request timed out. Please try again.')
+      } else {
+        alert('Failed to check in. Please try again.')
+      }
     }
   }
 
@@ -465,6 +614,7 @@ function App() {
         <MapClickHandler onMapClick={handleMapClick} />
         {filteredEvents.map((event) => {
           const interestInfo = interestedData[event.id] || { count: 0, userInterested: false }
+          const checkinInfo = checkinData[event.id] || { userCheckedIn: false }
           return (
             <Marker key={event.id} position={event.position}>
               <Popup>
@@ -508,6 +658,22 @@ function App() {
                       </button>
                     )}
                   </div>
+                  {user && (
+                    <div className="event-checkin-section">
+                      {checkinInfo.userCheckedIn ? (
+                        <div className="checkin-status">
+                          You checked in ✓
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => handleCheckIn(event.id, event.position)}
+                          className="checkin-button"
+                        >
+                          Check In
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               </Popup>
             </Marker>
