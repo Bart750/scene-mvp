@@ -39,8 +39,12 @@ function App() {
     locationName: '',
     date: '',
     time: '',
-    description: ''
+    description: '',
+    category: ''
   })
+  const [selectedCategory, setSelectedCategory] = useState('All Categories')
+  
+  const categories = ['Music', 'Sports', 'Art', 'Food', 'Nightlife', 'Community', 'Other']
   const [isLoading, setIsLoading] = useState(true)
   const [user, setUser] = useState(null)
   const [interestedData, setInterestedData] = useState({}) // { eventId: { count: number, userInterested: boolean } }
@@ -100,7 +104,8 @@ function App() {
           locationName: event.location_name,
           dateTime: event.date_time,
           description: event.description,
-          position: [event.lat, event.lng]
+          position: [event.lat, event.lng],
+          category: event.category || 'Other'
         }))
 
         setEvents(transformedEvents)
@@ -254,7 +259,7 @@ function App() {
     
     const dateTime = `${formData.date} ${formData.time}`
     
-    // Insert event into Supabase with user_id
+    // Insert event into Supabase with user_id and category
     const { data, error } = await supabase
       .from('events')
       .insert([
@@ -265,7 +270,8 @@ function App() {
           description: formData.description,
           lat: selectedPosition[0],
           lng: selectedPosition[1],
-          user_id: user?.id
+          user_id: user?.id,
+          category: formData.category || 'Other'
         }
       ])
       .select()
@@ -284,7 +290,8 @@ function App() {
         locationName: data[0].location_name,
         dateTime: data[0].date_time,
         description: data[0].description,
-        position: [data[0].lat, data[0].lng]
+        position: [data[0].lat, data[0].lng],
+        category: data[0].category || 'Other'
       }
       
       setEvents(prevEvents => [...prevEvents, newEvent])
@@ -295,7 +302,8 @@ function App() {
       locationName: '',
       date: '',
       time: '',
-      description: ''
+      description: '',
+      category: ''
     })
     setSelectedPosition(null)
     setIsModalOpen(false)
@@ -309,7 +317,8 @@ function App() {
       locationName: '',
       date: '',
       time: '',
-      description: ''
+      description: '',
+      category: ''
     })
   }
 
@@ -321,7 +330,11 @@ function App() {
     }))
   }
 
-  // Filter events based on date range and exclude past events
+  const handleCategoryFilterChange = (e) => {
+    setSelectedCategory(e.target.value)
+  }
+
+  // Filter events based on date range, category, and exclude past events
   const getFilteredEvents = () => {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
@@ -344,8 +357,31 @@ function App() {
       }
       
       // Check if event is within date range
-      return eventDate >= fromDate && eventDate <= toDate
+      if (eventDate < fromDate || eventDate > toDate) {
+        return false
+      }
+      
+      // Check category filter
+      if (selectedCategory !== 'All Categories' && event.category !== selectedCategory) {
+        return false
+      }
+      
+      return true
     })
+  }
+
+  // Get category color for styling
+  const getCategoryColor = (category) => {
+    const colors = {
+      'Music': '#8b5cf6',
+      'Sports': '#10b981',
+      'Art': '#f59e0b',
+      'Food': '#ef4444',
+      'Nightlife': '#6366f1',
+      'Community': '#06b6d4',
+      'Other': '#6b7280'
+    }
+    return colors[category] || colors['Other']
   }
 
   const filteredEvents = getFilteredEvents()
@@ -401,6 +437,20 @@ function App() {
               min={dateRange.from}
             />
           </div>
+          <div className="date-input-group">
+            <label htmlFor="categoryFilter">Category</label>
+            <select
+              id="categoryFilter"
+              value={selectedCategory}
+              onChange={handleCategoryFilterChange}
+              className="category-filter-select"
+            >
+              <option value="All Categories">All Categories</option>
+              {categories.map(cat => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
       <MapContainer
@@ -422,6 +472,11 @@ function App() {
                   <h3 style={{ margin: '0 0 8px 0', fontSize: '16px', fontWeight: 'bold' }}>
                     {event.title}
                   </h3>
+                  {event.category && (
+                    <p style={{ margin: '0 0 8px 0', fontSize: '14px', color: '#666' }}>
+                      <strong>Category:</strong> {event.category}
+                    </p>
+                  )}
                   <p style={{ margin: '4px 0', fontSize: '14px', color: '#666' }}>
                     <strong>Location:</strong> {event.locationName}
                   </p>
@@ -530,6 +585,22 @@ function App() {
                   rows="4"
                   required
                 />
+              </div>
+              <div className="form-group">
+                <label htmlFor="category">Category</label>
+                <select
+                  id="category"
+                  name="category"
+                  value={formData.category}
+                  onChange={handleInputChange}
+                  required
+                  className="category-select"
+                >
+                  <option value="">Select a category</option>
+                  {categories.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
               </div>
               <div className="form-actions">
                 <button type="button" onClick={handleCloseModal} className="cancel-button">
