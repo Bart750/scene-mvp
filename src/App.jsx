@@ -3,8 +3,8 @@ import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaf
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import './App.css'
+import sceneLogo from './assets/scene-logo.png'
 
-// Fix for default marker icons in react-leaflet
 delete L.Icon.Default.prototype._getIconUrl
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
@@ -12,7 +12,6 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
 })
 
-// Create a custom icon for temporary marker (red)
 const tempMarkerIcon = L.icon({
   iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
@@ -65,12 +64,9 @@ const initialEvents = [
   }
 ]
 
-// Component to handle map clicks
 function MapClickHandler({ onMapClick }) {
   useMapEvents({
-    click: (e) => {
-      onMapClick(e.latlng)
-    }
+    click: (e) => onMapClick(e.latlng)
   })
   return null
 }
@@ -103,29 +99,18 @@ function App() {
   const handleSubmit = (e) => {
     e.preventDefault()
     
-    if (!selectedPosition) {
-      return // Should not happen, but safety check
-    }
-    
-    // Generate a new ID (use timestamp to ensure uniqueness)
-    const newId = Date.now()
-    
-    // Combine date and time into dateTime string
-    const dateTime = `${formData.date} ${formData.time}`
+    if (!selectedPosition) return
     
     const newEvent = {
-      id: newId,
+      id: Date.now(),
       title: formData.title,
       locationName: formData.locationName,
-      dateTime: dateTime,
+      dateTime: `${formData.date} ${formData.time}`,
       description: formData.description,
       position: selectedPosition
     }
     
-    // Add the new event to the events array
     setEvents(prevEvents => [...prevEvents, newEvent])
-    
-    // Reset form, clear selected position, and close modal
     setFormData({
       title: '',
       locationName: '',
@@ -152,7 +137,7 @@ function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <h1>Scene</h1>
+        <img src={sceneLogo} alt="Scene" className="logo" />
       </header>
       <MapContainer
         center={[51.505, -0.09]}
