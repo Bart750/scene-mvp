@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
@@ -49,6 +49,8 @@ function App() {
   const [user, setUser] = useState(null)
   const [interestedData, setInterestedData] = useState({}) // { eventId: { count: number, userInterested: boolean } }
   const [checkinData, setCheckinData] = useState({}) // { eventId: { userCheckedIn: boolean } }
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false)
+  const [checkinHistory, setCheckinHistory] = useState([]) // Array of { event, checkin } objects
   
   // Initialize date range: From = today, To = 7 days from now
   const getTodayString = () => {
@@ -377,6 +379,11 @@ function App() {
           userCheckedIn: true
         }
       }))
+
+      // Refresh history if it's open
+      if (isHistoryOpen) {
+        fetchCheckinHistory()
+      }
     } catch (error) {
       console.error('Error checking in:', error)
       if (error.message === 'Geolocation is not supported by your browser') {
@@ -392,6 +399,55 @@ function App() {
       }
     }
   }
+
+  // Fetch check-in history with event details
+  const fetchCheckinHistory = useCallback(async () => {
+    if (!user) {
+      setCheckinHistory([])
+      return
+    }
+
+    try {
+      const { data: checkins, error } = await supabase
+        .from('checkins')
+        .select(`
+          id,
+          created_at,
+          event_id,
+          events (
+            id,
+            title,
+            category,
+            date_time
+          )
+        `)
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+
+      if (error) {
+        console.error('Error fetching check-in history:', error)
+        return
+      }
+
+      // Transform data to include event details
+      const history = checkins.map(checkin => ({
+        checkinId: checkin.id,
+        checkinDate: checkin.created_at,
+        event: checkin.events
+      })).filter(item => item.event !== null) // Filter out any null events
+
+      setCheckinHistory(history)
+    } catch (error) {
+      console.error('Error fetching check-in history:', error)
+    }
+  }, [user])
+
+  // Fetch history when modal opens
+  useEffect(() => {
+    if (isHistoryOpen && user) {
+      fetchCheckinHistory()
+    }
+  }, [isHistoryOpen, user, fetchCheckinHistory])
 
   const handleInputChange = (e) => {
     const { name, value } = e.target
@@ -552,6 +608,9 @@ function App() {
               <span className="user-name">
                 {user.user_metadata?.full_name || user.email?.split('@')[0]}
               </span>
+              <button onClick={() => setIsHistoryOpen(true)} className="history-button">
+                My History
+              </button>
               <button onClick={handleSignOut} className="sign-out-button">
                 Sign Out
               </button>
@@ -777,6 +836,77 @@ function App() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {isHistoryOpen && (
+        <div className="modal-overlay" onClick={() => setIsHistoryOpen(false)}>
+          <div className="modal-content history-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>My Check-In History</h2>
+              <button className="close-button" onClick={() => setIsHistoryOpen(false)}>×</button>
+            </div>
+            <div className="history-content">
+              {checkinHistory.length === 0 ? (
+                <div className="empty-history">
+                  <p>You haven't checked into any events yet.</p>
+                  <p className="empty-history-subtitle">Check in to events to see them here!</p>
+                </div>
+              ) : (
+                <div className="history-list">
+                  {checkinHistory.map((item) => {
+                    const checkinDate = new Date(item.checkinDate)
+                    const eventDate = new Date(item.event.date_time)
+                    
+                    return (
+                      <div key={item.checkinId} className="history-item">
+                        <div className="history-item-header">
+                          <h3 className="history-event-title">{item.event.title}</h3>
+                          {item.event.category && (
+                            <span 
+                              className="history-category-tag"
+                              style={{ backgroundColor: getCategoryColor(item.event.category) }}
+                            >
+                              {item.event.category}
+                            </span>
+                          )}
+                        </div>
+                        <div className="history-item-details">
+                          <p className="history-event-date">
+                            <strong>Event Date:</strong> {eventDate.toLocaleDateString('en-US', { 
+                              weekday: 'short', 
+                              year: 'numeric', 
+                              month: 'short', 
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </p>
+                          <p className="history-checkin-date">
+                            <strong>Checked In:</strong> {checkinDate.toLocaleDateString('en-US', { 
+                              year: 'numeric', 
+                              month: 'short', 
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </p>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+              <div className="history-actions">
+                <button 
+                  onClick={() => setIsHistoryOpen(false)} 
+                  className="back-to-map-button"
+                >
+                  Back to Map
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
