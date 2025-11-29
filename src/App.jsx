@@ -42,6 +42,23 @@ function App() {
     description: ''
   })
   const [isLoading, setIsLoading] = useState(true)
+  
+  // Initialize date range: From = today, To = 7 days from now
+  const getTodayString = () => {
+    const today = new Date()
+    return today.toISOString().split('T')[0]
+  }
+  
+  const getSevenDaysFromNowString = () => {
+    const sevenDaysFromNow = new Date()
+    sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7)
+    return sevenDaysFromNow.toISOString().split('T')[0]
+  }
+  
+  const [dateRange, setDateRange] = useState({
+    from: getTodayString(),
+    to: getSevenDaysFromNowString()
+  })
 
   // Fetch events from Supabase on component mount
   useEffect(() => {
@@ -156,11 +173,73 @@ function App() {
     })
   }
 
+  const handleDateRangeChange = (e) => {
+    const { name, value } = e.target
+    setDateRange(prev => ({
+      ...prev,
+      [name]: value
+    }))
+  }
+
+  // Filter events based on date range and exclude past events
+  const getFilteredEvents = () => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    
+    const fromDate = new Date(dateRange.from)
+    fromDate.setHours(0, 0, 0, 0)
+    
+    const toDate = new Date(dateRange.to)
+    toDate.setHours(23, 59, 59, 999)
+    
+    return events.filter(event => {
+      // Parse event dateTime (format: "YYYY-MM-DD HH:mm")
+      const eventDateStr = event.dateTime.split(' ')[0]
+      const eventDate = new Date(eventDateStr)
+      eventDate.setHours(0, 0, 0, 0)
+      
+      // Exclude past events (before today)
+      if (eventDate < today) {
+        return false
+      }
+      
+      // Check if event is within date range
+      return eventDate >= fromDate && eventDate <= toDate
+    })
+  }
+
+  const filteredEvents = getFilteredEvents()
+
   return (
     <div className="app">
       <header className="app-header">
         <img src={sceneLogo} alt="Scene" className="logo" />
       </header>
+      <div className="date-range-filter">
+        <div className="date-range-inputs">
+          <div className="date-input-group">
+            <label htmlFor="fromDate">From</label>
+            <input
+              type="date"
+              id="fromDate"
+              name="from"
+              value={dateRange.from}
+              onChange={handleDateRangeChange}
+            />
+          </div>
+          <div className="date-input-group">
+            <label htmlFor="toDate">To</label>
+            <input
+              type="date"
+              id="toDate"
+              name="to"
+              value={dateRange.to}
+              onChange={handleDateRangeChange}
+              min={dateRange.from}
+            />
+          </div>
+        </div>
+      </div>
       <MapContainer
         center={[51.505, -0.09]}
         zoom={13}
@@ -171,7 +250,7 @@ function App() {
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         <MapClickHandler onMapClick={handleMapClick} />
-        {events.map((event) => (
+        {filteredEvents.map((event) => (
           <Marker key={event.id} position={event.position}>
             <Popup>
               <div style={{ minWidth: '200px' }}>
