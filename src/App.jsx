@@ -43,6 +43,7 @@ function App() {
   })
   const [isLoading, setIsLoading] = useState(true)
   const [user, setUser] = useState(null)
+  const [interestedData, setInterestedData] = useState({}) // { eventId: { count: number, userInterested: boolean } }
   
   // Initialize date range: From = today, To = 7 days from now
   const getTodayString = () => {
@@ -113,6 +114,44 @@ function App() {
     fetchEvents()
   }, [])
 
+  // Fetch interested data when events or user changes
+  useEffect(() => {
+    const fetchInterestedData = async () => {
+      if (events.length === 0) return
+
+      try {
+        const eventIds = events.map(e => e.id)
+        
+        // Fetch all interested records for these events
+        const { data: interestedRecords, error } = await supabase
+          .from('interested')
+          .select('event_id, user_id')
+          .in('event_id', eventIds)
+
+        if (error) {
+          console.error('Error fetching interested data:', error)
+          return
+        }
+
+        // Calculate counts and user interest status
+        const interestedMap = {}
+        eventIds.forEach(eventId => {
+          const records = interestedRecords?.filter(r => r.event_id === eventId) || []
+          interestedMap[eventId] = {
+            count: records.length,
+            userInterested: user ? records.some(r => r.user_id === user.id) : false
+          }
+        })
+
+        setInterestedData(interestedMap)
+      } catch (error) {
+        console.error('Error fetching interested data:', error)
+      }
+    }
+
+    fetchInterestedData()
+  }, [events, user])
+
   const handleMapClick = (latlng) => {
     // Require login to add events
     if (!user) {
@@ -141,6 +180,62 @@ function App() {
     if (error) {
       console.error('Error signing out:', error)
       alert('Failed to sign out. Please try again.')
+    }
+  }
+
+  const handleToggleInterest = async (eventId) => {
+    if (!user) {
+      handleSignIn()
+      return
+    }
+
+    const currentData = interestedData[eventId] || { count: 0, userInterested: false }
+    const isInterested = currentData.userInterested
+
+    try {
+      if (isInterested) {
+        // Remove interest
+        const { error } = await supabase
+          .from('interested')
+          .delete()
+          .eq('event_id', eventId)
+          .eq('user_id', user.id)
+
+        if (error) throw error
+
+        // Update local state
+        setInterestedData(prev => ({
+          ...prev,
+          [eventId]: {
+            count: Math.max(0, (prev[eventId]?.count || 0) - 1),
+            userInterested: false
+          }
+        }))
+      } else {
+        // Add interest
+        const { error } = await supabase
+          .from('interested')
+          .insert([
+            {
+              event_id: eventId,
+              user_id: user.id
+            }
+          ])
+
+        if (error) throw error
+
+        // Update local state
+        setInterestedData(prev => ({
+          ...prev,
+          [eventId]: {
+            count: (prev[eventId]?.count || 0) + 1,
+            userInterested: true
+          }
+        }))
+      }
+    } catch (error) {
+      console.error('Error toggling interest:', error)
+      alert('Failed to update interest. Please try again.')
     }
   }
 
@@ -318,26 +413,51 @@ function App() {
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         <MapClickHandler onMapClick={handleMapClick} />
-        {filteredEvents.map((event) => (
-          <Marker key={event.id} position={event.position}>
-            <Popup>
-              <div style={{ minWidth: '200px' }}>
-                <h3 style={{ margin: '0 0 8px 0', fontSize: '16px', fontWeight: 'bold' }}>
-                  {event.title}
-                </h3>
-                <p style={{ margin: '4px 0', fontSize: '14px', color: '#666' }}>
-                  <strong>Location:</strong> {event.locationName}
-                </p>
-                <p style={{ margin: '4px 0', fontSize: '14px', color: '#666' }}>
-                  <strong>Date & Time:</strong> {event.dateTime}
-                </p>
-                <p style={{ margin: '8px 0 0 0', fontSize: '14px', lineHeight: '1.4' }}>
-                  {event.description}
-                </p>
-              </div>
-            </Popup>
-          </Marker>
-        ))}
+        {filteredEvents.map((event) => {
+          const interestInfo = interestedData[event.id] || { count: 0, userInterested: false }
+          return (
+            <Marker key={event.id} position={event.position}>
+              <Popup>
+                <div className="event-popup">
+                  <h3 style={{ margin: '0 0 8px 0', fontSize: '16px', fontWeight: 'bold' }}>
+                    {event.title}
+                  </h3>
+                  <p style={{ margin: '4px 0', fontSize: '14px', color: '#666' }}>
+                    <strong>Location:</strong> {event.locationName}
+                  </p>
+                  <p style={{ margin: '4px 0', fontSize: '14px', color: '#666' }}>
+                    <strong>Date & Time:</strong> {event.dateTime}
+                  </p>
+                  <p style={{ margin: '8px 0 12px 0', fontSize: '14px', lineHeight: '1.4' }}>
+                    {event.description}
+                  </p>
+                  <div className="event-interest-section">
+                    {interestInfo.count > 0 && (
+                      <span className="interest-count">
+                        {interestInfo.count} {interestInfo.count === 1 ? 'person' : 'people'} interested
+                      </span>
+                    )}
+                    {user ? (
+                      <button
+                        onClick={() => handleToggleInterest(event.id)}
+                        className={`interest-button ${interestInfo.userInterested ? 'interested' : ''}`}
+                      >
+                        {interestInfo.userInterested ? "You're interested ✓" : "I'm interested"}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={handleSignIn}
+                        className="interest-button sign-in-prompt"
+                      >
+                        Sign in to show interest
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </Popup>
+            </Marker>
+          )
+        })}
         {selectedPosition && (
           <Marker 
             position={selectedPosition}

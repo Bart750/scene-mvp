@@ -474,3 +474,63 @@
   background-color: #0056b3;
 }
 
+.event-popup {
+  min-width: 200px;
+}
+
+.event-interest-section {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.interest-count {
+  font-size: 13px;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.interest-button {
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background-color: white;
+  color: #374151;
+  width: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.interest-button:hover {
+  background-color: #f9fafb;
+  border-color: #9ca3af;
+}
+
+.interest-button.interested {
+  background-color: #007bff;
+  color: white;
+  border-color: #007bff;
+}
+
+.interest-button.interested:hover {
+  background-color: #0056b3;
+  border-color: #0056b3;
+}
+
+.interest-button.sign-in-prompt {
+  background-color: #f3f4f6;
+  color: #6b7280;
+  border-color: #d1d5db;
+}
+
+.interest-button.sign-in-prompt:hover {
+  background-color: #e5e7eb;
+  color: #374151;
+}
+
