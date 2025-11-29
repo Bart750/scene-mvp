@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import './App.css'
 import sceneLogo from './assets/scene-logo.png'
+import { supabase } from './supabase'
 
 delete L.Icon.Default.prototype._getIconUrl
 L.Icon.Default.mergeOptions({
@@ -21,48 +22,6 @@ const tempMarkerIcon = L.icon({
   shadowSize: [41, 41]
 })
 
-const initialEvents = [
-  {
-    id: 1,
-    title: 'Jazz Night at the Bridge',
-    locationName: 'Tower Bridge',
-    dateTime: '2024-03-15 19:00',
-    description: 'An evening of smooth jazz performances overlooking the Thames. Featuring local artists and refreshments.',
-    position: [51.5055, -0.0754]
-  },
-  {
-    id: 2,
-    title: 'Art Exhibition Opening',
-    locationName: 'British Museum',
-    dateTime: '2024-03-18 18:30',
-    description: 'Contemporary art exhibition showcasing works from emerging London artists. Free entry with refreshments.',
-    position: [51.5194, -0.1270]
-  },
-  {
-    id: 3,
-    title: 'Summer Music Festival',
-    locationName: 'Hyde Park',
-    dateTime: '2024-03-20 14:00',
-    description: 'Outdoor music festival featuring multiple stages, food vendors, and activities for all ages.',
-    position: [51.5074, -0.1657]
-  },
-  {
-    id: 4,
-    title: 'Tech Meetup',
-    locationName: 'London Eye',
-    dateTime: '2024-03-22 18:00',
-    description: 'Monthly tech meetup for developers and entrepreneurs. Networking, talks, and discussions about the latest in tech.',
-    position: [51.5033, -0.1195]
-  },
-  {
-    id: 5,
-    title: 'Street Performance Festival',
-    locationName: 'Covent Garden',
-    dateTime: '2024-03-25 12:00',
-    description: 'Weekend street performance festival with musicians, magicians, and entertainers throughout the market area.',
-    position: [51.5115, -0.1236]
-  }
-]
 
 function MapClickHandler({ onMapClick }) {
   useMapEvents({
@@ -72,7 +31,7 @@ function MapClickHandler({ onMapClick }) {
 }
 
 function App() {
-  const [events, setEvents] = useState(initialEvents)
+  const [events, setEvents] = useState([])
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [selectedPosition, setSelectedPosition] = useState(null)
   const [formData, setFormData] = useState({
@@ -82,6 +41,42 @@ function App() {
     time: '',
     description: ''
   })
+  const [isLoading, setIsLoading] = useState(true)
+
+  // Fetch events from Supabase on component mount
+  useEffect(() => {
+    const fetchEvents = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('events')
+          .select('*')
+          .order('created_at', { ascending: false })
+
+        if (error) {
+          console.error('Error fetching events:', error)
+          return
+        }
+
+        // Transform database events to app format
+        const transformedEvents = data.map(event => ({
+          id: event.id,
+          title: event.title,
+          locationName: event.location_name,
+          dateTime: event.date_time,
+          description: event.description,
+          position: [event.lat, event.lng]
+        }))
+
+        setEvents(transformedEvents)
+      } catch (error) {
+        console.error('Error fetching events:', error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchEvents()
+  }, [])
 
   const handleMapClick = (latlng) => {
     setSelectedPosition([latlng.lat, latlng.lng])
@@ -96,21 +91,48 @@ function App() {
     }))
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     
     if (!selectedPosition) return
     
-    const newEvent = {
-      id: Date.now(),
-      title: formData.title,
-      locationName: formData.locationName,
-      dateTime: `${formData.date} ${formData.time}`,
-      description: formData.description,
-      position: selectedPosition
+    const dateTime = `${formData.date} ${formData.time}`
+    
+    // Insert event into Supabase
+    const { data, error } = await supabase
+      .from('events')
+      .insert([
+        {
+          title: formData.title,
+          location_name: formData.locationName,
+          date_time: dateTime,
+          description: formData.description,
+          lat: selectedPosition[0],
+          lng: selectedPosition[1]
+        }
+      ])
+      .select()
+
+    if (error) {
+      console.error('Error inserting event:', error)
+      alert('Failed to add event. Please try again.')
+      return
+    }
+
+    // Transform the inserted event to app format and add to state
+    if (data && data.length > 0) {
+      const newEvent = {
+        id: data[0].id,
+        title: data[0].title,
+        locationName: data[0].location_name,
+        dateTime: data[0].date_time,
+        description: data[0].description,
+        position: [data[0].lat, data[0].lng]
+      }
+      
+      setEvents(prevEvents => [...prevEvents, newEvent])
     }
     
-    setEvents(prevEvents => [...prevEvents, newEvent])
     setFormData({
       title: '',
       locationName: '',
