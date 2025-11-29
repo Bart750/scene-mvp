@@ -42,6 +42,7 @@ function App() {
     description: ''
   })
   const [isLoading, setIsLoading] = useState(true)
+  const [user, setUser] = useState(null)
   
   // Initialize date range: From = today, To = 7 days from now
   const getTodayString = () => {
@@ -59,6 +60,23 @@ function App() {
     from: getTodayString(),
     to: getSevenDaysFromNowString()
   })
+
+  // Check for existing session and listen for auth changes
+  useEffect(() => {
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null)
+    })
+
+    // Listen for auth changes
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null)
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
 
   // Fetch events from Supabase on component mount
   useEffect(() => {
@@ -96,8 +114,34 @@ function App() {
   }, [])
 
   const handleMapClick = (latlng) => {
+    // Require login to add events
+    if (!user) {
+      alert('Please sign in to add events.')
+      return
+    }
     setSelectedPosition([latlng.lat, latlng.lng])
     setIsModalOpen(true)
+  }
+
+  const handleSignIn = async () => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin
+      }
+    })
+    if (error) {
+      console.error('Error signing in:', error)
+      alert('Failed to sign in. Please try again.')
+    }
+  }
+
+  const handleSignOut = async () => {
+    const { error } = await supabase.auth.signOut()
+    if (error) {
+      console.error('Error signing out:', error)
+      alert('Failed to sign out. Please try again.')
+    }
   }
 
   const handleInputChange = (e) => {
@@ -115,7 +159,7 @@ function App() {
     
     const dateTime = `${formData.date} ${formData.time}`
     
-    // Insert event into Supabase
+    // Insert event into Supabase with user_id
     const { data, error } = await supabase
       .from('events')
       .insert([
@@ -125,7 +169,8 @@ function App() {
           date_time: dateTime,
           description: formData.description,
           lat: selectedPosition[0],
-          lng: selectedPosition[1]
+          lng: selectedPosition[1],
+          user_id: user?.id
         }
       ])
       .select()
@@ -214,6 +259,29 @@ function App() {
     <div className="app">
       <header className="app-header">
         <img src={sceneLogo} alt="Scene" className="logo" />
+        <div className="auth-section">
+          {user ? (
+            <div className="user-info">
+              {user.user_metadata?.avatar_url && (
+                <img 
+                  src={user.user_metadata.avatar_url} 
+                  alt={user.user_metadata?.full_name || user.email} 
+                  className="user-avatar"
+                />
+              )}
+              <span className="user-name">
+                {user.user_metadata?.full_name || user.email?.split('@')[0]}
+              </span>
+              <button onClick={handleSignOut} className="sign-out-button">
+                Sign Out
+              </button>
+            </div>
+          ) : (
+            <button onClick={handleSignIn} className="sign-in-button">
+              Sign In
+            </button>
+          )}
+        </div>
       </header>
       <div className="date-range-filter">
         <div className="date-range-inputs">

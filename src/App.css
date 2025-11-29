@@ -30,7 +30,7 @@
   border-bottom: 1px solid #e5e7eb;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
   z-index: 1000;
   padding: 0 16px;
 }
@@ -39,11 +39,85 @@
   height: 40px;
   width: auto;
   display: block;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.auth-section {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+}
+
+.sign-in-button {
+  padding: 8px 16px;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.sign-in-button:hover {
+  background-color: #0056b3;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.user-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.user-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+  display: none;
+}
+
+.sign-out-button {
+  padding: 8px 16px;
+  background-color: #f3f4f6;
+  color: #374151;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.sign-out-button:hover {
+  background-color: #e5e7eb;
 }
 
 @media (min-width: 640px) {
   .app-header {
     height: 64px;
+    padding: 0 24px;
+  }
+  
+  .user-name {
+    display: inline;
+  }
+  
+  .sign-in-button,
+  .sign-out-button {
+    padding: 10px 20px;
+    font-size: 14px;
   }
 }
 
